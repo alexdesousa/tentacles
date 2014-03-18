@@ -3,13 +3,12 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
 
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+-define(DEFAULT_HANDLER_MAX_AGE, 30).
 
 %% ===================================================================
 %% API functions
@@ -23,5 +22,42 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+    {BossDBSup, BossNewsSup} = get_database(),
+    {Sender, SenderSup}      = get_server(sender),
+    {Receiver, ReceiverSup}  = get_server(receiver),
 
+    Children = [BossDBSup, Sender, Receiver, SenderSup, ReceiverSup],
+    RestartStrategy = {one_for_one, 10, 10},
+
+    {ok, {RestartStrategy, Children}}.
+
+get_database() ->
+    DBOptions = case application:get_env(tentacles, tentacles_boss_db) of
+        undefined -> [];
+        {ok, Val} -> Val
+    end,
+    BossDBSup   = { t_boss_db
+                  , {boss_db, start, [DBOptions]}
+                  , permanent, 2000, supervisor, [boss_db]},
+    BossNewsSup = { t_boss_news
+                  , {boss_news, start, []}
+                  , permanent, 2000, supervisor, [boss_news]},
+    {BossDBSup, BossNewsSup}.
+
+get_server(Name) ->
+    MaxAge = case application:get_env(tentacles, tentacles_handler_max_age) of
+        undefined -> ?DEFAULT_HANDLER_MAX_AGE;
+        {ok, Val} -> Val
+    end,
+    
+    ServerName         = list_to_atom("t_" ++ atom_to_list(Name) ++ "_controller"),
+    ServerInternalName = list_to_atom("tentacles_" ++ atom_to_list(Name)),
+    Server = { ServerName
+             , {tentacles_server, start_link, [ServerInternalName, MaxAge]}
+             , permanent, 2000, worker, [tentacles_server]},
+    
+    SupervisorName = list_to_atom("t_" ++ atom_to_list(Name) ++ "_sup"),
+    SenderSup = { SupervisorName
+                , {tentacles_server_sup, start_link, [ServerInternalName]}
+                , permanent, 2000, supervisor, [tentacles_server_sup]},
+    {Server, SenderSup}.
