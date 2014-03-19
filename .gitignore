@@ -1,0 +1,7 @@
+*.swp
+*.beam
+*.dump
+*.COVER.*
+logs/*
+ebin/*
+deps/*
