@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -26,7 +26,7 @@ init([]) ->
     {Sender, SenderSup}      = get_server(sender),
     {Receiver, ReceiverSup}  = get_server(receiver),
 
-    Children = [BossDBSup, Sender, Receiver, SenderSup, ReceiverSup],
+    Children = [BossDBSup, BossNewsSup, Sender, Receiver, SenderSup, ReceiverSup],
     RestartStrategy = {one_for_one, 10, 10},
 
     {ok, {RestartStrategy, Children}}.
