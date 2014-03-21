@@ -45,19 +45,13 @@ get_database() ->
     {BossDBSup, BossNewsSup}.
 
 get_server(Name) ->
-    MaxAge = case application:get_env(tentacles, tentacles_handler_max_age) of
-        undefined -> ?DEFAULT_HANDLER_MAX_AGE;
-        {ok, Val} -> Val
-    end,
-    
     ServerName         = list_to_atom("t_" ++ atom_to_list(Name) ++ "_controller"),
-    ServerInternalName = list_to_atom("tentacles_" ++ atom_to_list(Name)),
     Server = { ServerName
-             , {tentacles_server, start_link, [ServerInternalName, MaxAge]}
+             , {tentacles_server, start_link, [Name]}
              , permanent, 2000, worker, [tentacles_server]},
     
     SupervisorName = list_to_atom("t_" ++ atom_to_list(Name) ++ "_sup"),
     SenderSup = { SupervisorName
-                , {tentacles_server_sup, start_link, [ServerInternalName]}
+                , {tentacles_server_sup, start_link, [Name]}
                 , permanent, 2000, supervisor, [tentacles_server_sup]},
     {Server, SenderSup}.
