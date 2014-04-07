@@ -1,104 +1,120 @@
 -module(tentacles_sender_controller).
 
--behaviour(gen_server).
+-behaviour(tentacles_controller).
 
--export([start_link/3]).
+-export([start_link/4]).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+% Callbacks.
+-export([init/1, handle_message/2, handle_timeout/1, handle_event/2,
+         handle_termination/2]).
 
--record(state, { id      :: any()
-               , max_age :: tentacles_server:seconds()
-               , parent  :: atom()
-               }).
+-record(state, { base_name :: tentacles_dispatcher:base_name()
+               , id        :: tentacles_dispatcher:id()}).
 
-start_link(Id, Parent, MaxAge) ->
-    MaxAgeMs = MaxAge * 1000,
-    gen_server:start_link(?MODULE, [Id, Parent, MaxAgeMs], []).
+start_link(BaseName, Controller, Id, MaxAge) ->
+    tentacles_controller:start_link(Controller, [BaseName, Id, MaxAge]).
 
-init([Id, Parent, MaxAge]) ->
-    {ok, #state{id = Id, max_age = MaxAge, parent = Parent}, MaxAge}.
-
-handle_call(_, _From, State) ->
-    {noreply, State, State#state.max_age}.
-
-% {ok, NewPriority} | {error, Reason}
-handle_cast({{up, MasterNode, Node, Priority, Nll, Ell}, From}, State) ->
-    gen_server:reply(From, {ok, Priority}),
-    {noreply, State, State#state.max_age};
+init([BaseName, Id, MaxAge]) ->
+    State = #state{ base_name = BaseName
+                  , id        = Id},
+    {ok, State, MaxAge}.
 
 % ok | {error, Reason}
-handle_cast({{down, MasterNode, Node}, From}, State) ->
-    gen_server:reply(From, ok),
-    {noreply, State, State#state.max_age};
-
-% pong | pang.
-handle_cast({{ping_server, Node}, From}, State) ->
-    case send_to_receiver(Node, internal, ping) of
-        {pong, _} = Pong ->
-            gen_server:reply(From, Pong);
-        {{error, _}, Ms} ->
-            gen_server:reply(From, {pang, Ms})
-    end,
-    {noreply, State, State#state.max_age};
-
-% ok | {error, Reason}
-handle_cast({{exec, Id, Program, Args, BadNodes}, From}, State) ->
-    gen_server:reply(From, ok),
-    {noreply, State, State#state.max_age};
-    
-% {ok, Response} | {error, Reason}
-handle_cast({{send, Id, Message}, From}, State) ->
-    gen_server:reply(From, {ok, response}),
-    {noreply, State, State#state.max_age};
+handle_message({exec, Program, Args, BadNodes}, State) ->
+    Response = remote_command(State, BadNodes, {exec, Program, Args}),
+    {reply, Response, State};
 
 % {ok, Response} | {error, Reason}
-handle_cast({{send, SenderId, Id, Message}, From}, State) ->
-    gen_server:reply(From, {ok, response}),
-    {noreply, State, State#state.max_age};
+handle_message({send, Message}, State) ->
+    Response = remote_command(State, [], {send, Message}),
+    {reply, Response, State};
+
+% {ok, Response} | {error, Reason}
+handle_message({send, Sender, Message}, State) ->
+    case is_it_here(Sender) of
+        true ->
+            Response = remote_command(State, [], {send, Message}),
+            {reply, Response, State};
+        false ->
+            {reply, {error, not_here}, State}
+    end;
+
+% pong | pang
+handle_message(ping, State) ->
+    Response = remote_command(State, [], ping),
+    {reply, Response, State};
 
 % ok | {error, Reason}
-handle_cast({{die, Id}, From}, State) ->
-    gen_server:reply(From, ok),
-    {noreply, State, State#state.max_age};
+handle_message(die, State) ->
+    Response = remote_command(State, [], die),
+    {reply, Response, State};
 
 % ok | {error, Reason}
-handle_cast({{suicide, Id}, From}, State) ->
-    gen_server:reply(From, ok),
-    {noreply, State, State#state.max_age};
-
-% pong | pang.
-handle_cast({{ping, Id}, From}, State) ->
-    gen_server:reply(From, pong),
-    {noreply, State, State#state.max_age};
+handle_message(suicide, State) ->
+    Id = State#state.id,
+    case is_it_here(Id) of
+        true ->
+            Response = delete_id(Id),
+            {reply, Response, State};
+        false ->
+            {reply, {error, not_here}, State}
+    end;
 
 % {normal | emergency, running | pending | down | kill} | {error, Reason}.
-handle_cast({{get_state, Id}, From}, State) ->
-    gen_server:reply(From, running),
-    {noreply, State, State#state.max_age}.
+handle_message(get_state, State) ->
+    Id = State#state.id,
+    Response = get_state(Id),
+    {reply, Response, State}.
 
-handle_info(timeout, State) ->
-    gen_server:cast(State#state.parent, {expire, State#state.id}),
-    {stop, normal, State};
-handle_info(_Info, State) ->
-    {noreply, State, State#state.max_age}.
+handle_timeout(State) ->
+    BaseName = State#state.base_name,
+    Id       = State#state.id,
+    tentacles_dispatcher:expire(BaseName, Id),
+    {stop, normal, State}.
 
-terminate(_Reason, _State) ->
+handle_event(_Event, State) ->
+    {noreply, State}.
+
+handle_termination(_Reason, _State) ->
     ok.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+-spec remote_command( State    :: #state{}
+                    , BadNodes :: list(node())
+                    , Message  :: term()) -> term().
+%% @doc Executes remote command.
+remote_command(State, BadNodes, Message) ->
+    BaseName = State#state.base_name,
+    case pick_node(BadNodes) of
+        none ->
+            {error, busy_server};
+        Node ->
+            Id       = State#state.id,
+            case tentacles_dispatcher:async_message(BaseName, Node, Id, Message) of
+                {error, _} = Error ->
+                    Error;
+                {Reply, _}         ->
+                    Reply    
+            end
+    end.
 
--spec send_to_receiver( Node :: local | node()
-                      , Id   :: any()
-                      , Msg  :: any()) -> {any(), tentacles_server:millisecs()}.
-%% @doc Sends message `Msg` to tentacles_receiver in the specified `Node` to the 
-%% process with identified by `Id`.
-send_to_receiver(Node, Id, Msg) ->
-    tentacles_server:send_to_server(Node, tentacles_receiver, {Id, Msg}).
+-spec pick_node(BadNodes :: list(node())) -> none | node().
+%% @doc TODO: Picks a node: a. Less loaded node if Id does not exist. b. Node where Id
+%%      is running. c. A node different from any node in BadNodes.
+pick_node(_BadNodes) ->
+    node().
 
--spec send_to_redistributor( Node :: local | node()
-                           , Msg  :: any()) -> {any(), tentacles_server:millisecs()}.
-%% @doc Sends message `Msg` to tentacles_redistributor in the specified `Node`.
-send_to_redistributor(Node, Msg) ->
-    % Get redistributor node? Probably.
-    tentacles_server:send_to_server(Node, tentacles_redistributor, {serial, Msg}).%TODO: serial calls in tentacles_server.
+-spec is_it_here(Id :: tentacles_dispatcher:id()) -> true | false.
+%% @doc TODO:Whether the Id is in this node or not, according to the database.
+is_it_here(_Id) ->
+    true.
+
+-spec delete_id(Id :: tentacles_dispatcher:id()) -> ok.
+%% @doc TODO: Deletes an Id from the database.
+delete_id(_Id) ->
+    ok.
+
+-spec get_state(Id :: tentacles_dispatcher:id()) -> {normal | emergency, running | pending | down | kill}
+                                                  | {error, Reason :: term()}.
+%% @doc TODO: Gets Id's state from database.
+get_state(_Id) ->
+    {normal, running}.
