@@ -41,7 +41,7 @@
 %% @doc Executes functions if the hook module exists.
 execute_hook(Function, Args) ->
     Module = case application:get_env(tentacles, ?HOOKS) of
-        undefined -> ?HOOKS;
+        undefined -> ?DEFAULT_HOOKS;
         {ok, M}   -> M
     end,
     try Module:module_info(exports) of
