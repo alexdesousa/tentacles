@@ -9,6 +9,10 @@
 -record(state, { base_name :: tentacles_dispatcher:base_name()
                , id        :: tentacles_dispatcher:id()}).
 
+%-------------------------------------------------------------------------------
+% Callback implementation.
+%-------------------------------------------------------------------------------
+
 init(BaseName, Id) ->
     State = #state{ base_name = BaseName
                   , id        = Id},
@@ -59,19 +63,24 @@ handle_message(suicide, State) ->
 handle_message(get_state, State) ->
     Id = State#state.id,
     Response = get_state(Id),
-    {reply, Response, State}.
+    {reply, Response, State};
+
+% Any.
+handle_message(_Any, State) ->
+    {noreply, State}.
 
 handle_timeout(State) ->
-    BaseName = State#state.base_name,
-    Id       = State#state.id,
-    tentacles_dispatcher:expire(BaseName, Id),
-    {stop, normal, State}.
+    {noreply, State}.
 
 handle_event(_Event, State) ->
     {noreply, State}.
 
 handle_termination(_Reason, _State) ->
     ok.
+
+%-------------------------------------------------------------------------------
+% Private functions.
+%-------------------------------------------------------------------------------
 
 -spec remote_command( State    :: #state{}
                     , BadNodes :: list(node())
