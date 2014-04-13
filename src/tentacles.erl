@@ -3,9 +3,9 @@
 -export([execute/3, execute/4, send/2, send/3, ping/1, die/1, suicide/1,
          get_state/1, inform_availability/4, inform_unavailability/1]).
 
--define(TENTACLES_SENDER, tentacles_sender_dispatcher).
+-define(TENTACLES_SENDER, sender).
 
--define(TENTACLES_REDISTRIBUTOR, tentacles_redistributor_dispatcher).
+-define(TENTACLES_REDISTRIBUTOR, redistributor).
 
 %-------------------------------------------------------------------------------
 % Types.
@@ -32,7 +32,7 @@
 
 -spec execute( Id        :: tentacles_disptacher:id()
              , Program   :: program()
-             , Arguments :: arguments()) -> {ok, tentacles_controller:millisecs()}
+             , Arguments :: arguments()) -> {ok, tentacles_dispatcher:microsecs()}
                                           | error().
 %% @doc Executes a remote `Program` (should be an atom) using its `Arguments`.
 %% The program is differentiated among the rest of the same instance of the
@@ -43,7 +43,7 @@ execute(Id, Program, Args) ->
 -spec execute( Id        :: tentacles_dispatcher:id()
              , Program   :: program()
              , Arguments :: arguments()
-             , BadNodes  :: [node()]) -> {ok, tentacles_controller:millisecs()}
+             , BadNodes  :: [node()]) -> {ok, tentacles_dispatcher:microsecs()}
                                        | error().
 %% @doc Same as execute/3 but it also receives a list of nodes. These `BadNodes`
 %% are forbbiden nodes for execution.
@@ -52,7 +52,7 @@ execute(Id, Program, Args, BadNodes) ->
 
 -spec send( Id      :: tentacles_dispatcher:id()
           , Message :: tentacles_controller:message()) ->
-                      {{ok, term()}, tentacles_controller:millisecs()}
+                      {{ok, term()}, tentacles_dispatcher:microsecs()}
                     | error().
 %% @doc Sends a `Message` to a program using its `Id`.
 send(Id, Message) ->
@@ -61,7 +61,7 @@ send(Id, Message) ->
 -spec send( Id      :: tentacles_dispatcher:id()
           , Sender  :: tentacles_dispatcher:id()
           , Message :: tentacles_controller:message()) ->
-                      {{ok, term()}, tentacles_controller:millisecs()}
+                      {{ok, term()}, tentacles_dispatcher:microsecs()}
                     | error().
 %% @doc Sends a `Message` to a program by its `Id` from another program identified
 %% by its identifier `Sender`.
@@ -69,7 +69,7 @@ send(Id, Sender, Message) ->
     send_to_sender(Id, {send, Sender, Message}).
 
 -spec ping(Id :: tentacles_dispatcher:id()) ->
-                  {pong, tentacles_controller:millisecs()}
+                  {pong, tentacles_dispatcher:microsecs()}
                 | pang.
 %% @doc Pings program by `Id`.
 ping(Id) ->
@@ -79,21 +79,21 @@ ping(Id) ->
     end.
 
 -spec die(Id :: tentacles_dispatcher:id()) ->
-                  {ok, tentacles_controller:millisecs()}
+                  {ok, tentacles_dispatcher:microsecs()}
                 | error().
 %% @doc Kills a program by `Id`.
 die(Id) ->
     send_to_sender(Id, die).
 
 -spec suicide(Id :: tentacles_dispatcher:id()) ->
-                  {ok, tentacles_controller:millisecs()}
+                  {ok, tentacles_dispatcher:microsecs()}
                 | error().
 %% @doc Informs the server that the program identified by `Id` shuts itself down.
 suicide(Id) ->
     send_to_sender(Id, suicide).
 
 -spec get_state(Id :: tentacles_dispatcher:id()) ->
-                      {program_state(), tentacles_controller:millisecs()}
+                      {program_state(), tentacles_dispatcher:microsecs()}
                     | error().
 %% @doc Gets state of a program by its `Id`.
 get_state(Id) ->
@@ -103,7 +103,7 @@ get_state(Id) ->
                          , Priority   :: integer()
                          , Nll        :: non_neg_integer()
                          , Ell        :: non_neg_integer()) ->
-              { {ok, Priority :: integer()}, tentacles_controller:millisecs()}
+              { {ok, Priority :: integer()}, tentacles_dispatcher:microsecs()}
             | error().
 % @doc Informs availability of the caller node.
 inform_availability(MasterNode, Priority, Nll, Ell) ->
@@ -115,7 +115,7 @@ inform_availability(MasterNode, Priority, Nll, Ell) ->
     end.
 
 -spec inform_unavailability(MasterNode :: node()) -> 
-                                          {ok, tentacles_controller:millisecs()}
+                                          {ok, tentacles_dispatcher:microsecs()}
                                         | error().
 % @doc Informs unavailability of certain server (shutdown).
 inform_unavailability(MasterNode) ->

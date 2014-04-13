@@ -9,6 +9,8 @@
 -record(state, { base_name :: tentacles_dispatcher:base_name()
                , id        :: tentacles_dispatcher:id()}).
 
+-define(TENTACLES_RECEIVER, receiver).
+
 %-------------------------------------------------------------------------------
 % Callback implementation.
 %-------------------------------------------------------------------------------
@@ -87,13 +89,16 @@ handle_termination(_Reason, _State) ->
                     , Message  :: term()) -> term().
 %% @doc Executes remote command.
 remote_command(State, BadNodes, Message) ->
-    BaseName = State#state.base_name,
     case pick_node(BadNodes) of
         none ->
             {error, busy_server};
         Node ->
             Id       = State#state.id,
-            case tentacles_dispatcher:async_message(BaseName, Node, Id, Message) of
+            Response = tentacles_dispatcher:async_message( ?TENTACLES_RECEIVER
+                                                         , Node
+                                                         , Id
+                                                         , Message),
+            case Response of
                 {error, _} = Error ->
                     Error;
                 {Reply, _}         ->
