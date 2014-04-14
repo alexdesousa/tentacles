@@ -130,10 +130,10 @@ inform_unavailability(MasterNode) ->
                             tentacles_dispatcher:response().
 %% @doc Send message to tentacles sender server.
 send_to_sender(Id, Message) ->
-    Response = tentacles_dispatcher:async_message( ?TENTACLES_SENDER
-                                                 , node()
-                                                 , Id
-                                                 , Message),
+    Response = tentacles_dispatcher:concurrent_message( ?TENTACLES_SENDER
+                                                      , node()
+                                                      , Id
+                                                      , Message),
     case Response of
         {{error, _} = Error, _} -> Error;
         {_, _}                  -> Response
