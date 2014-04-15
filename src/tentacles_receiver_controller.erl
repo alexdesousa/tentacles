@@ -39,10 +39,7 @@ handle_message(die, State) ->
     {reply, Response, State}.
 
 handle_timeout(State) ->
-    BaseName = State#state.base_name,
-    Id       = State#state.id,
-    tentacles_dispatcher:expire(BaseName, Id),
-    {stop, normal, State}.
+    {noreply, State}.
 
 handle_event(_Event, State) ->
     {noreply, State}.

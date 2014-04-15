@@ -23,8 +23,9 @@ init([]) ->
     %{BossDBSup, BossNewsSup} = get_database(),
     Sender   = get_server(sender, []),
     Receiver = get_server(receiver, []),
+    Redist   = get_server(redist, []),
 
-    Children = [Sender, Receiver],
+    Children = [Sender, Receiver, Redist],
     RestartStrategy = {one_for_one, 10, 10},
 
     {ok, {RestartStrategy, Children}}.

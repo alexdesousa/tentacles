@@ -1,7 +1,7 @@
 -module(tentacles).
 
 -export([execute/3, execute/4, send/2, send/3, ping/1, die/1, suicide/1,
-         get_state/1, inform_availability/4, inform_unavailability/1]).
+         get_state/1, hail/2, dismiss/1]).
 
 -define(TENTACLES_SENDER, sender).
 
@@ -99,27 +99,19 @@ suicide(Id) ->
 get_state(Id) ->
     send_to_sender(Id, get_state).
 
--spec inform_availability( MasterNode :: node()
-                         , Priority   :: integer()
-                         , Nll        :: non_neg_integer()
-                         , Ell        :: non_neg_integer()) ->
-              { {ok, Priority :: integer()}, tentacles_dispatcher:microsecs()}
-            | error().
+-spec hail( MasterNode :: node()
+          , MaxLoad    :: non_neg_integer()) ->
+                { {ok, Priority :: integer()}, tentacles_dispatcher:microsecs()}
+              | error().
 % @doc Informs availability of the caller node.
-inform_availability(MasterNode, Priority, Nll, Ell) ->
-    if
-        Nll > Ell ->
-            {error, wrong_limits};
-        true ->
-            send_to_redistributor(MasterNode, {up, node(), Priority, Nll, Ell})
-    end.
+hail(MasterNode, MaxLoad) ->
+    send_to_redistributor(MasterNode, {hail, MaxLoad}).
 
--spec inform_unavailability(MasterNode :: node()) -> 
-                                          {ok, tentacles_dispatcher:microsecs()}
-                                        | error().
+-spec dismiss(MasterNode :: node()) -> {ok, tentacles_dispatcher:microsecs()}
+                                     | error().
 % @doc Informs unavailability of certain server (shutdown).
-inform_unavailability(MasterNode) ->
-    send_to_redistributor(MasterNode, {down, node()}).
+dismiss(MasterNode) ->
+    send_to_redistributor(MasterNode, dismiss).
 
 %-------------------------------------------------------------------------------
 % Private functions.
@@ -139,8 +131,16 @@ send_to_sender(Id, Message) ->
         {_, _}                  -> Response
     end.
 
-%% @doc TODO: Really implement this. Send to remote redistributor.
-send_to_redistributor(_MasterNode, {down, _Node}) ->
-    {ok, 42};
-send_to_redistributor(_MasterNode, {up, _Node, _Priority, _Nll, _Ell}) ->
-    {{ok, 42}, 42}.
+-spec send_to_redistributor( MasterNode :: node()
+                           , Message    :: tentacles_controller:message()) ->
+                                    tentacles_dispatcher:response().
+%% @doc Sends `Message` to redistributor at `MasterNode`.
+send_to_redistributor(MasterNode, Message) ->
+    Response = tentacles_dispatcher:sync_message( ?TENTACLES_REDISTRIBUTOR
+                                                , MasterNode
+                                                , node()
+                                                , Message),
+    case Response of
+        {{error, _} = Error, _} -> Error;
+        _                       -> Response
+    end.
