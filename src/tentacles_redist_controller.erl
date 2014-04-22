@@ -14,10 +14,10 @@ init(BaseName, Id) ->
                   , node      = Id},
     {ok, State}.
 
-handle_message({hail, _MaxLoad}, State) ->
-    %TODO: Calculate Priority.
-    %TODO: Add to database.
-    {reply, {ok, 42}, State};
+handle_message({hail, MaxLoad}, State) ->
+    Node     = State#state.node,
+    Response = tentacles_priority:set_priority(Node, MaxLoad),
+    {reply, Response, State};
 handle_message(dismiss, State) ->
     %TODO: Erase from database. 
     {reply, ok, State};

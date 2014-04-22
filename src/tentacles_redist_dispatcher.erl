@@ -58,32 +58,34 @@ connect() ->
 -spec connect( MasterNode :: node()
              , Tries      :: integer()) -> State :: #state{}.
 %% @doc TODO: Connects to the master redistributor.
-connect(MasterNode, Tries) when (Tries > 0) ->
+connect(_Node, 0) ->
+    % Master redistributor.
+    MaxLoad  = get_node_max_load(),
+    case tentacles_priority:set_master_priority(MaxLoad) of
+        {ok, Priority} ->
+            lagger:info("Tentacles node ~s started as master.", [node()]),
+            #state{
+                stage    = init,
+                priority = Priority
+            };
+        _ ->
+            lagger:error("Cannot initialize tentacles node ~s.", [node()]),
+            exit(cannot_set_master)
+    end;
+connect(MasterNode, Tries) ->
+    % Normal node.
     MaxLoad = get_node_max_load(),
     case tentacles:hail(MasterNode, MaxLoad) of
         {{ok, Priority}, _} ->
-            %Log connection.
+            lagger:info("Tentacles node ~s started with priority ~p.", [node(), Priority]),
             #state{
                 stage    = update,
                 priority = Priority
             };
         _ ->
-            % Log failure and tries left,
+            lagger:info("Fail to hail master ~s. Tries left ~p.", [node(), Tries - 1]),
             connect(MasterNode, Tries - 1)
-    end;
-connect(_Node, _Tries) ->
-    %This is master redistributor.
-    MasterNode = node(),
-    %Clear table nodes,
-    Priority = 0,
-    MaxLoad  = get_node_max_load(),
-    %Add to database nodes(MasterNode, Priority, MaxLoad),
-    %Update new redistributor to database.
-    %Log running,
-    #state{
-        stage    = init,
-        priority = Priority
-    }.
+    end.
 
 %-------------------------------------------------------------------------------
 % Getters for environment variables.
